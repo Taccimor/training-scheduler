@@ -13,7 +13,7 @@ It was born from a real need: coordinating training for hundreds of groups acros
 7. [Using the script without theory / practice distinction](#using-the-script-without-theory--practice-distinction)
 8. [Running from the command line](#running-from-the-command-line)
 9. [Technical section (for developers)](#technical-section-for-developers)
-    - [More detailed algorithm explanation](more-detailed-algorithm-explanation)
+    - [More detailed algorithm explanation](#more-detailed-algorithm-explanation)
     - [Data structures](#data-structures)
     - [Known issues and limitations](#known-issues-and-limitations)
     - [Possible additional features](#possible-additional-features)
