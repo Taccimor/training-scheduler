@@ -211,8 +211,6 @@ All state lives in `ScheduleState`:
 - `assignments: list[dict]` — the final schedule; one dict per session, with day, slot, group, module, activity, trainer, venue, room.
 
 ## Known issues and limitations
-These are the honest, current limitations of the code.
-
 - Not globally optimal. The scheduler is greedy and processes groups in order. The final makespan can therefore be longer than the true optimum. In particular:
   - The permutation chosen for group *i* is the best for group *i* alone, given the current state. It may be a bad choice for group *i+1*, *i+2*, etc.
   - Groups with smaller ids get first pick on all resources. If `groups_per_venue` is set to a highly unbalanced distribution, later groups may be forced to start much later.
