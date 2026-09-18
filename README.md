@@ -182,7 +182,7 @@ The algorithm is a greedy, group‑by‑group scheduler with a local permutation
 
 1. __Group assignment to venues__. Each group is assigned to exactly one venue. If `groups_per_venue` is `None`, distribution is round‑robin (equal as possible); otherwise the user‑provided list is used.
 2. __Per‑group scheduling__. Groups are processed sequentially, from group 0 upwards. The order matters: earlier groups get "first pick" on the resource pool, later groups are fitted around them.
-3. __Permutation search over block order__. For each group, the scheduler enumerates all `5! = 120` orderings of the five module blocks (according to the configuration you already find in the code, which is customizable). For each ordering, it tries to place each block as early as possible using a greedy earliest‑start search (`find_earliest_start`). The ordering that minimises the finish day of that group is chosen. Note that this is a local optimisation, not a global one — see Known Issues.
+3. __Permutation search over block order__. For each group, the scheduler enumerates all `5! = 120` orderings of the five module blocks (according to the configuration you already find in the code, which is customizable). For each ordering, it tries to place each block as early as possible using a greedy earliest‑start search (`find_earliest_start`). The ordering that minimises the finish day of that group is chosen. Note that this is a local optimisation, not a global one.
 4. __Feasibility check (`can_place_block`)__. Before a block is placed on a candidate start day, three things are verified for every session of the block:
    - Trainer availability in the specific module's pool, for that day and that slot.
    - Room availability in the group's venue, for that day and that slot.
@@ -219,7 +219,8 @@ These are the honest, current limitations of the code.
 - No backtracking between groups. If a late group cannot be scheduled within a reasonable horizon (2000 days forward from its lower bound), `find_earliest_start` returns `None`, and the group is skipped — the script will then raise an error at the end when trying to assign trainers, because the block has no assigned start day. In practice this never happens with realistic inputs, but it's not handled gracefully.
 - Fixed block sequence within a module. The `BLOCKS` dictionary determines the exact order of sessions inside a module. Once fixed, the scheduler cannot reorder them (for example, to move a theory session after a practice session to fit a specific gap).
 - The 2000‑day search limit in `find_earliest_start` is hard‑coded. If you set up an extraordinarily sparse capacity scenario, the search could return `None` without a clear explanation.
-- Excel columns are dense. With many groups and many days, the Calendar sheet can become extremely wide. 
+- Excel columns are dense. With many groups and many days, the Calendar sheet can become extremely wide.
+- I've never asked the AI ​​to refactor the code, because I honestly don't care, I wouldn't be able to fully understand it anyway. Moreover, the code is already fast.
 
 ## Possible additional features
 ⚠️ Note: Some of this features have been suggested by the AI.
