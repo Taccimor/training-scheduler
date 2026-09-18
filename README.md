@@ -218,10 +218,7 @@ These are the honest, current limitations of the code.
   - Groups with smaller ids get first pick on all resources. If `groups_per_venue` is set to a highly unbalanced distribution, later groups may be forced to start much later.
 - No backtracking between groups. If a late group cannot be scheduled within a reasonable horizon (2000 days forward from its lower bound), `find_earliest_start` returns `None`, and the group is skipped — the script will then raise an error at the end when trying to assign trainers, because the block has no assigned start day. In practice this never happens with realistic inputs, but it's not handled gracefully.
 - Fixed block sequence within a module. The `BLOCKS` dictionary determines the exact order of sessions inside a module. Once fixed, the scheduler cannot reorder them (for example, to move a theory session after a practice session to fit a specific gap).
-- Theory/practice and its "gap" is currently defined at the block level, not at the session level. This means the theoretical minimum makespan is not always achievable if some venues have a very uneven theory/practice ratio.
-- Trainer continuity is best‑effort. A trainer is kept for a group and module only if that trainer is free on the required day. If not, the trainer changes for the rest of that module, and the "continuity" preference is reset for the module — the code doesn't try to go back to the original trainer later.
 - The 2000‑day search limit in `find_earliest_start` is hard‑coded. If you set up an extraordinarily sparse capacity scenario, the search could return `None` without a clear explanation.
-- Room numbering is per venue and per activity. Room 1 is the first theory room and the first practice room in the same venue — the numbering restarts for each activity type.
 - Excel columns are dense. With many groups and many days, the Calendar sheet can become extremely wide. 
 
 ## Possible additional features
