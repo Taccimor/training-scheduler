@@ -13,6 +13,7 @@ It was born from a real need: coordinating training for hundreds of groups acros
 7. [Using the script without theory / practice distinction](#using-the-script-without-theory--practice-distinction)
 8. [Running from the command line](#running-from-the-command-line)
 9. [Technical section (for developers)](#technical-section-for-developers)
+    - [More detailed algorothm explanation](more-detailed-algorithm-explanation)
     - [Data structures](#data-structures)
     - [Known issues and limitations](#known-issues-and-limitations)
     - [Possible additional features](#possible-additional-features)
@@ -89,6 +90,7 @@ If all three checks pass, the session is placed. If any fails, the script tries 
 **A note on optimality.** The script is **locally optimal**, not **globally optimal**. It chooses the best option for each group *one at a time*, wihtout never coming back to previous allocations, but the final result may not be the absolute mathematical best. Think of it as packing a suitcase: you take items one by one and place them where they fit best at that moment, without ever rearranging everything to find the perfect packing. In our case, "packing one item" = "scheduling one group". For example, when the code schedules group 5, it picks the choice that looks best for group 5 at that moment. But that choice might make things harder for group 200 later on.
 
 To produce the mathematically best calendar, the script would have to compare every possible combination of orderings, days, trainers and rooms for all groups simultaneously — an astronomically large number. Imagine a modest scenario: 10 venues, each serving 10 groups, 5 modules with 20 sessions. The total number of possible calendars would be on the order of 10²³⁰⁰. For comparison: the number of atoms in the observable universe is about 10⁸⁰. So the calendar you get is valid and reasonably compact, but it is not provably the theoretical minimum.
+
 ⚠️ Note: these calculations have been made by the AI.
 
 # Customising the scheduler — the Config class
@@ -126,6 +128,7 @@ How many groups are attached to each venue. Two options:
 
 ## `max_workload_diff`
 A warning threshold. At the end of the run, the script checks whether, within each module, the busiest trainer worked significantly more days than the least busy one. If the difference exceeds this number, a warning is printed.
+
 ⚠️ This does not affect scheduling: the script will never refuse to schedule or delay a group to satisfy this threshold. It's just a signal that the group distribution across venues might be too unbalanced for the trainers to stay even. Raise it if you want fewer warnings, lower it if you want to be strict.
 
 ## `output_path`
@@ -174,7 +177,7 @@ Any flag you don't pass uses the corresponding value from `Config`.
 ⚠️ Note: the `BLOCKS` dictionary cannot currently be set from the command line — if you need to change the number or the order of sessions per module, edit the file directly.
 
 # Technical section (for developers)
-## How the scheduler works
+## More detailed algorothm explanation
 The algorithm is a greedy, group‑by‑group scheduler with a local permutation search.
 
 1. __Group assignment to venues__. Each group is assigned to exactly one venue. If `groups_per_venue` is `None`, distribution is round‑robin (equal as possible); otherwise the user‑provided list is used.
