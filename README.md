@@ -1,5 +1,5 @@
 # Training Scheduler
-A Python tool that schedules potentially – complex training for any number of groups of trainees across multiple geographic venues, respecting rooms, trainers, rest days, and trainer travel constraints.
+A Python tool that schedules – potentially – complex training for any number of groups of trainees across multiple geographic venues, respecting rooms, trainers, rest days, and trainer travel constraints.
 
 It was born from a real need: coordinating training for hundreds of groups across several venues, each venue with its own practice and theory rooms, and each trainer being an expert in only one module.
 
