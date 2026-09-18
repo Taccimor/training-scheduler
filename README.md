@@ -13,7 +13,7 @@ It was born from a real need: coordinating training for hundreds of groups acros
 7. [Using the script without theory / practice distinction](#using-the-script-without-theory--practice-distinction)
 8. [Running from the command line](#running-from-the-command-line)
 9. [Technical section (for developers)](#technical-section-for-developers)
-    - [More detailed algorothm explanation](more-detailed-algorithm-explanation)
+    - [More detailed algorithm explanation](more-detailed-algorithm-explanation)
     - [Data structures](#data-structures)
     - [Known issues and limitations](#known-issues-and-limitations)
     - [Possible additional features](#possible-additional-features)
@@ -177,7 +177,7 @@ Any flag you don't pass uses the corresponding value from `Config`.
 ⚠️ Note: the `BLOCKS` dictionary cannot currently be set from the command line — if you need to change the number or the order of sessions per module, edit the file directly.
 
 # Technical section (for developers)
-## More detailed algorothm explanation
+## More detailed algorithm explanation
 The algorithm is a greedy, group‑by‑group scheduler with a local permutation search.
 
 1. __Group assignment to venues__. Each group is assigned to exactly one venue. If `groups_per_venue` is `None`, distribution is round‑robin (equal as possible); otherwise the user‑provided list is used.
