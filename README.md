@@ -6,13 +6,14 @@ It was born from a real need: coordinating training for hundreds of groups acros
 # Table of contents
 1. [Vibe coding warning](#vibe-coding-warning)
 2. [What this tool does](#what-this-tool-does)
-3. [Quick start](#quick-start)
-4. [Understanding the output](#understanding-the-output)
-5. [How the scheduler works](#how-the-scheduler-works)
-6. [Customising the scheduler — the `Config` class](#customising-the-scheduler--the-config-class)
-7. [Using the script without theory / practice distinction](#using-the-script-without-theory--practice-distinction)
-8. [Running from the command line](#running-from-the-command-line)
-9. [Technical section (for developers)](#technical-section-for-developers)
+3. [Requirements](#requirements)
+4. [Quick start](#quick-start)
+5. [Understanding the output](#understanding-the-output)
+6. [How the scheduler works](#how-the-scheduler-works)
+7. [Customising the scheduler — the `Config` class](#customising-the-scheduler--the-config-class)
+8. [Using the script without theory / practice distinction](#using-the-script-without-theory--practice-distinction)
+9. [Running from the command line](#running-from-the-command-line)
+10. [Technical section (for developers)](#technical-section-for-developers)
     - [More detailed algorithm explanation](#more-detailed-algorithm-explanation)
     - [Data structures](#data-structures)
     - [Known issues and limitations](#known-issues-and-limitations)
@@ -22,7 +23,7 @@ It was born from a real need: coordinating training for hundreds of groups acros
 This code has been created mainly with AI (DeepSeek) because I'm not able to code. It has been tested manually, randomly checking some days by filtering the Excel table.
 
 # What this tool does
-Imagine you need to organise the same training programme for many groups of people. The programme may be composed of modules, each module may have a certain number of theory sessions and practice sessions. Every group must go through all the modules, in some order, and may need to respect a rest period between two consecutive training days (because they need to digest what they learned or because they may have other commitments). The order of the modules is free: a group can, for example, do Module 5 first, then Module 1, then Module 3. The only rule is that a module must be completed once it has started — sessions of two different modules cannot interleave for the same group.
+Imagine you need to organise the same training programme for many groups of people. The programme is composed of modules, each module may have a certain number of theory sessions and practice sessions. Every group must go through all the modules, in some order, and may need to respect a rest period between two consecutive training days (because they need to digest what they learned or because they may have other commitments). The order of the modules is free: a group can, for example, do Module 5 first, then Module 1, then Module 3. The only rule is that a module must be completed once it has started — sessions of two different modules cannot interleave for the same group.
 
 The groups are spread across different geographic areas (venues). Each venue contains a fixed number of rooms, some may be dedicated to theory and some to practice. Because of geographical constraints, every group is bound to one venue: its participants can only train in the rooms of the venue they belong to.
 
@@ -32,6 +33,45 @@ The scheduler produces an Excel calendar telling you, for every group and every 
 
 It also produces a detailed table with the same information in separate columns, easier to filter and analyse as a table
 
+# Requirements
+Does this tool fit your training? Before using the scheduler, check that your training programme has the
+characteristics below. If one of them does not apply to your situation, this tool is not suitable for you.
+
+## Programme structure
+
+- **A fixed set of modules, identical for every group.** All groups follow the same programme: the same modules, the same number of sessions per module.
+- **No prerequisite order between modules.** Any module can be taken at any time. A group can do Module 5 first and Module 1 last. The script will choose the order that fits each group's calendar best.
+- **Modules cannot interleave.** Once a group starts a module, it must finish all of that module's sessions before starting the next one. The script enforces this by treating each module as an indivisible block.
+- **Any number of modules, configurable in the code**. ⚠️ Note: the current algorithm scales factorially with the number of modules. It basically means that it can work fine and fast up to about 6 modules. With 7 or more, runtime grows quickly and the code can become very slow.
+
+## Venues and rooms
+
+- **Every group belongs to exactly one venue for the entire programme.** A group cannot switch venues mid‑way. Venues are geographic areas, and the group's participants are assumed to be able to reach only their own.
+- **Each venue has a fixed number of theory rooms and practice rooms.** Rooms within the same venue and of the same type are interchangeable: the script cares about how many there are, not which specific one is used.
+- **Rooms have no other properties.** No capacity, no equipment, no specialisation beyond "theory" or "practice". If some rooms are larger or better equipped and you need to match specific groups to them, this tool cannot do that.
+
+## Trainers
+
+- **Each trainer teaches exactly one module.** Trainers are not interchangeable across modules: a Module 2 trainer cannot teach Module 4, even temporarily.
+- **Each module has its own pool of trainers, with a fixed size.** The number of trainers per module is a configuration parameter and can differ from module to module.
+- **Trainers have no availability constraints beyond the slot model.** No vacations, no part‑time days, no "only available in the morning". A trainer is either free or busy on a given slot, nothing else.
+- **Trainers have no geographical constraints**. Contrary to the groups, trainers don't pertain to any specific venue or groups of venues. The code assumes that they are free to travel to every venue, but still tries to keep the movement as low as possible.
+
+## Time and sessions
+
+- **All sessions have the same duration.** Every session occupies exactly one slot, and every slot is equivalent. You can input in the script how many sessions there are per day. Every day will always have the same set of sessions.
+- **Rest days are uniform across the programme.** The same number of rest days applies between every pair of consecutive training days, for every group and every module. The value is configurable but not per‑module.
+- **No deadlines.** The scheduler minimises the total calendar length, but you cannot ask it to "finish Module 3 by a certain date". It will place sessions as early as resources allow, not according to external targets.
+- **Groups are independent.** Groups do not have to coordinate with each other. Their only interaction is through shared trainers and shared rooms within a venue.
+
+## What this tool is *not* designed for
+
+- Programmes where modules must be taken in a specific sequence.
+- Programmes where a group can be split across venues.
+- Programmes where the same trainer teaches multiple modules.
+- Programmes with per‑module rest days or per‑session durations.
+- Programmes with rooms that have specific requirements (capacity,
+  equipment) beyond the theory/practice split.
 # Quick start
 1. Install Python 3.10 or newer.
 2. Install the required libraries:
@@ -49,15 +89,13 @@ python "training-scheduler.py"
 The Excel file has two sheets.
 
 ## Calendar
-A grid where rows are groups and columns are days. Days are split into slots, so a column labelled `Day 3-2` means "day 3, slot 2".
+A grid where rows are groups and columns are days. Days are split into slots, so a column labelled `Day 3-2` means "day 3, slot 2". Each (day, slot) pair gets its own column in the Calendar. If a group has more than one session on the same day (possible when `max_trainings_per_day_per_group >= 2`), those sessions appear in different columns, one per slot.
 
 In each cell you'll find a string in this format:
 ```
 module-activity-trainer-venue-room
 ```
 For example, `2-T-13-4-1` means: Module 2, Theory, trainer number 13, venue 4, room 1.
-
-If a group has more than one training on the same day (possible only if you allow more than 1 training per day per group), they will appear on separate lines in the same cell.
 
 ## Detailed
 A flat table with one row per session and these columns: `Day`, `Slot`, `Group`, `Module`, `Activity`, `Trainer`, `Venue`, `Room`.
@@ -94,7 +132,7 @@ If all three checks pass, the session is placed. If any fails, the script tries 
 
 **A note on continuity.** The continuity preference is **best‑effort**: it only works if the same trainer happens to be free on the days the group needs. If not, a different trainer is assigned and the preference is dropped. The script does **not** delay a session just to keep the same trainer, because that would lengthen the calendar. Continuity is nice to have, not a hard rule.
 
-**A note on optimality.** The script is **locally optimal**, not **globally optimal**. It chooses the best option for each group *one at a time*, wihtout never coming back to previous allocations, but the final result may not be the absolute mathematical best. Think of it as packing a suitcase: you take items one by one and place them where they fit best at that moment, without ever rearranging everything to find the perfect packing. In our case, "packing one item" = "scheduling one group". For example, when the code schedules group 5, it picks the choice that looks best for group 5 at that moment. But that choice might make things harder for group 200 later on.
+**A note on optimality.** The script is **locally optimal**, not **globally optimal**. It chooses the best option for each group *one at a time*, without never coming back to previous allocations, but the final result may not be the absolute mathematical best. Think of it as packing a suitcase: you take items one by one and place them where they fit best at that moment, without ever rearranging everything to find the perfect packing. In our case, "packing one item" = "scheduling one group". For example, when the code schedules group 5, it picks the choice that looks best for group 5 at that moment. But that choice might make things harder for group 200 later on.
 
 To produce the mathematically best calendar, the script would have to compare every possible combination of orderings, days, trainers and rooms for all groups simultaneously — an astronomically large number. Imagine a modest scenario: 10 venues, each serving 10 groups, 5 modules with 20 sessions. The total number of possible calendars would be on the order of 10²³⁰⁰. For comparison: the number of atoms in the observable universe is about 10⁸⁰. So the calendar you get is valid and reasonably compact, but it is not provably the theoretical minimum.
 
@@ -107,20 +145,27 @@ Everything you can tweak lives inside the `Config` class, right at the top of th
 How many groups you need to schedule. Example: `self.num_groups = 172`.
 
 ## `trainers_per_module`
-A list of five numbers, one per module, telling how many trainers are available for each module. Example: `self.trainers_per_module = [7, 5, 7, 7, 7]` means 7 trainers for Module 1, 5 for Module 2, 7 for Module 3, and so on.
+A list, one number per module, in module order (module 1, module 2, …). The length must equal the number of modules defined in `BLOCKS`. Example: `self.trainers_per_module = [7, 5, 7, 7, 7]` means 7 trainers for Module 1, 5 for Module 2, 7 for Module 3, and so on.
 
 Trainers are not interchangeable: a trainer of Module 2 cannot teach Module 4. Each module's trainers are a separate pool.
 
 ## `rest_days`
-Number of rest days between two consecutive training days for the same group. Example: `self.rest_days = 1` means that if a group trains on day 10, the next training day can be day 12 at the earliest.
+Number of rest days between two consecutive training days for the same group. Example: `self.rest_days = 1` means that if a group trains on day 10, the next training day can be day 12 at the earliest. If a group has more than one session on the same day, the day counts as one training day.
 
-Note: this applies between every pair of consecutive training days, including within a single module. If you want training days back‑to‑back, set this to 0.
+⚠️ Note: if you want training days back‑to‑back, set this to 0.
 
 ## `slots_per_day`
-How many training sessions a single trainer (or a single room) can host in one day. Example: `self.slots_per_day = 2` means morning + afternoon, `self.slots_per_day = 3` means morning + afternoon + evening.
+How many training sessions a single trainer (or a single room) can host in one day. Example: `self.slots_per_day = 2` means morning + afternoon, `self.slots_per_day = 3` means morning + afternoon + evening. This value also caps `max_trainings_per_day_per_group` (see below).
 
 ## `max_trainings_per_day_per_group`
-Maximum number of sessions that the same group can have in one day. Example: `self.max_trainings_per_day_per_group = 1` means 1 session per day. If you set 2 slots per day, it means that training can happen both in morning and afternoon, but a group participates to only one slot per day, leaving half of the day free for them.
+Maximum number of sessions that the same group can attend in one day. For example:
+
+- `self.max_trainings_per_day_per_group = 1` means each group attends at most one session per day, even if more slots are available.
+- `self.max_trainings_per_day_per_group = 2` (with `slots_per_day >= 2`) means each group can attend both morning and afternoon, packing two sessions into the same day instead of spreading them over two days.
+
+This parameter must satisfy `1 <= max_trainings_per_day_per_group <= slots_per_day`. If you set it higher than `slots_per_day`, the script raises an error, because a group cannot physically attend more sessions than there are slots in a day.
+
+⚠️ Note: increasing this value does not shorten the rest days. Rest days are counted between training days, not between individual sessions. If rest_days = 6 and a group has 2 sessions on day 10, the next training day (whether one session or two) is still day 17 at the earliest.
 
 ## `practice_rooms_per_venue`
 A list, one element per venue, telling how many practice rooms each venue has. Example: `self.practice_rooms_per_venue = [4, 2, 4, 1, 1, 2, 3, 2, 5, 2, 4, 6]`.
@@ -136,12 +181,12 @@ How many groups are attached to each venue. Two options:
 ## `max_workload_diff`
 A warning threshold. At the end of the run, the script checks whether, within each module, the busiest trainer worked significantly more days than the least busy one. If the difference exceeds this number, a warning is printed.
 
-⚠️ This does not affect scheduling: the script will never refuse to schedule or delay a group to satisfy this threshold. It's just a signal that the group distribution across venues might be too unbalanced for the trainers to stay even. Raise it if you want fewer warnings, lower it if you want to be strict.
+⚠️ Note: This does not affect scheduling: the script will never refuse to schedule or delay a group to satisfy this threshold. It's just a signal that the group distribution across venues might be too unbalanced for the trainers to stay even. Raise it if you want fewer warnings, lower it if you want to be strict.
 
 ## `output_path`
 Full path of the Excel file to produce. Example: `self.output_path = "C:/Users/yourname/Desktop/schedule.xlsx"`.
 
-# Editing the `BLOCKS` dictionary
+## Editing the `BLOCKS` dictionary
 Below the Config class there is a section called `BLOCKS`. It describes, for each module, the ordered list of sessions it contains, in this format:
 ```
 'M1': [(1, 'T'), (1, 'T'), (1, 'T'), (1, 'P'), (1, 'P'), (1, 'P')]
@@ -150,7 +195,13 @@ Each `(number, letter)` pair means "one session of module *number*, activity *le
 
 To change how many sessions a module has, or the sequence of theory/practice, just edit these lists.
 
-# Using the script without theory / practice distinction
+To add a module, do two things:
+1. add an entry to `BLOCKS`, for example `'M6': [(6, 'T'), (6, 'T'), (6, 'P')]`;
+2. add the corresponding number of trainers to `trainers_per_module`. Nothing else. Removing a module follows the same logic in reverse.
+
+⚠️ Note: Module numbers must stay consecutive starting from 1.
+
+## Using the script without theory / practice distinction
 If your training program have no theory/practice split (it only has just "training sessions"), the script works still fine, without any modification to the code. Be sure to follow these two steps:
 
 1. In the `BLOCKS` dictionary, only use `T`. The list now only contains `(module, 'T')` pairs.
@@ -283,19 +334,20 @@ All state lives in `ScheduleState`:
 - Not globally optimal. The scheduler is greedy and processes groups in order. The final makespan can therefore be longer than the true optimum. In particular:
   - The permutation chosen for group *i* is the best for group *i* alone, given the current state. It may be a bad choice for group *i+1*, *i+2*, etc.
   - Groups with smaller ids get first pick on all resources. If `groups_per_venue` is set to a highly unbalanced distribution, later groups may be forced to start much later.
-- No backtracking between groups. If a late group cannot be scheduled within a reasonable horizon (2000 days forward from its lower bound), `find_earliest_start` returns `None`, and the group is skipped — the script will then raise an error at the end when trying to assign trainers, because the block has no assigned start day. In practice this never happens with realistic inputs, but it's not handled gracefully.
+- No backtracking between groups. If a late group cannot be scheduled within a reasonable horizon (2000 days forward from its lower bound), `find_earliest_start` returns `None`, no feasible permutation is found, and the script stops with a `RuntimeError` naming the group that failed. In practice this never happens with realistic inputs, but it's not handled gracefully.
 - Fixed block sequence within a module. The `BLOCKS` dictionary determines the exact order of sessions inside a module. Once fixed, the scheduler cannot reorder them (for example, to move a theory session after a practice session to fit a specific gap).
 - The 2000‑day search limit in `find_earliest_start` is hard‑coded. If you set up an extraordinarily sparse capacity scenario, the search could return `None` without a clear explanation.
 - Excel columns are dense. With many groups and many days, the Calendar sheet can become extremely wide.
 - I've never asked the AI ​​to refactor the code, because I honestly don't care, I wouldn't be able to fully understand it anyway. Moreover, the code is already fast.
+- The code is fast and reliable up to 6 modules. With 7 or more, runtime can grow quickly because the possible combinations of modules grows exponentially.
 
 ## Possible additional features
 ⚠️ Note: Some of this features have been suggested by the AI.
 
 These are features that would make the tool more powerful, for whoever would like to implement them in the original code.
 - __Graphical user interface__. A simple desktop or web app where users can set Config parameters via forms, click "run", and preview the calendar without touching Python.
-- __Rescheduling of one session__. Keeping all constraints, allow the user to drag a session to a different day and re‑validate the whole plan. Useful when an unexpected event disrupts the schedule.
-- __Configurable activity types__. Currently only `T` and `P` exist. Let the user rename them, add more (e.g. `E` for exam, `W` for workshop, ecc.) and define per‑type room pools.
+- __Rescheduling of one session__. Allow the user to mark a specific session as impossible on a given day, and let the scheduler move it to the next feasible day (with a loose and a strict mode).
+- __Configurable activity types__. Currently only `T` and `P` exist. Let the user rename them, add more (e.g. `E` for exam, `W` for workshop, etc.) and define per‑type room pools.
 - __Improved optimisation__. Replace the greedy scheduler with:
   - A Constraint Programming (CP) or Integer Linear Programming (ILP) model using Google OR‑Tools or similar.
   - Or a local search / simulated annealing optimiser that starts from the current schedule and improves it.
@@ -308,8 +360,9 @@ These are features that would make the tool more powerful, for whoever would lik
 - __Parallel / distributed scheduling__. For very large instances, split groups across workers and merge.
 - __Better logging__. Currently the script prints a progress line every 20 groups. A proper log file with timestamps and per‑group decisions would help debugging.
 - __Unit tests__. A small test suite validating the invariants (no double‑booked trainer, no double‑booked room, rest days respected, etc.) would make contributions safer.
-- __Hierarcy customization__: Possibility to activate or disable or reorder decision criteria like: Does each group have to go through the modules in order? Can modules interleave? Is the trainer continuity mandatory?
+- __Hierarchy customization__: Possibility to activate or disable or reorder decision criteria like: Does each group have to go through the modules in order? Can modules interleave? Is the trainer continuity mandatory?
 - __Live preview__: Possibility to have a live preview of the calendar before exporting it to Excel, or possibility to have a preview of some useful data (e.g. total number of days) before exporting to Excel.
+- __Different algorithms__: for 7 or more modules, the script can become very slow. It should change algorithm.
 
 ## Contributing
 Pull requests and issues are welcome. If you're proposing an algorithmic improvement, please include a short description of the scenario you are targeting.
