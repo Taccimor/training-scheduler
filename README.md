@@ -31,7 +31,7 @@ Trainers are not shared between modules: the trainers of Module 1 only teach Mod
 
 The scheduler produces an Excel calendar telling you, for every group and every day, which module, which activity, which trainer, which venue and which room are involved.
 
-It also produces a detailed table with the same information in separate columns, easier to filter and analyse as a table
+It also produces a detailed table with the same information in separate columns, easier to filter and analyse as a table.
 
 # Requirements
 Does this tool fit your training? Before using the scheduler, check that your training programme has the
@@ -59,7 +59,7 @@ characteristics below. If one of them does not apply to your situation, this too
 
 ## Time and sessions
 
-- **All sessions have the same duration.** Every session occupies exactly one slot, and every slot is equivalent. You can input in the script how many sessions there are per day. Every day will always have the same set of sessions.
+- **All sessions have the same duration.** Every session occupies exactly one slot, and every slot is equivalent. Every day will always have the same set of sessions. You can set in the script how many slots per day each trainer/room can host and how many of them a group can use.
 - **Rest days are uniform across the programme.** The same number of rest days applies between every pair of consecutive training days, for every group and every module. The value is configurable but not per‑module.
 - **No deadlines.** The scheduler minimises the total calendar length, but you cannot ask it to "finish Module 3 by a certain date". It will place sessions as early as resources allow, not according to external targets.
 - **Groups are independent.** Groups do not have to coordinate with each other. Their only interaction is through shared trainers and shared rooms within a venue.
@@ -132,7 +132,7 @@ If all three checks pass, the session is placed. If any fails, the script tries 
 
 **A note on continuity.** The continuity preference is **best‑effort**: it only works if the same trainer happens to be free on the days the group needs. If not, a different trainer is assigned and the preference is dropped. The script does **not** delay a session just to keep the same trainer, because that would lengthen the calendar. Continuity is nice to have, not a hard rule.
 
-**A note on optimality.** The script is **locally optimal**, not **globally optimal**. It chooses the best option for each group *one at a time*, without never coming back to previous allocations, but the final result may not be the absolute mathematical best. Think of it as packing a suitcase: you take items one by one and place them where they fit best at that moment, without ever rearranging everything to find the perfect packing. In our case, "packing one item" = "scheduling one group". For example, when the code schedules group 5, it picks the choice that looks best for group 5 at that moment. But that choice might make things harder for group 200 later on.
+**A note on optimality.** The script is **locally optimal**, not **globally optimal**. It chooses the best option for each group *one at a time*, without ever coming back to previous allocations, but the final result may not be the absolute mathematical best. Think of it as packing a suitcase: you take items one by one and place them where they fit best at that moment, without ever rearranging everything to find the perfect packing. In our case, "packing one item" = "scheduling one group". For example, when the code schedules group 5, it picks the choice that looks best for group 5 at that moment. But that choice might make things harder for group 200 later on.
 
 To produce the mathematically best calendar, the script would have to compare every possible combination of orderings, days, trainers and rooms for all groups simultaneously — an astronomically large number. Imagine a modest scenario: 10 venues, each serving 10 groups, 5 modules with 20 sessions. The total number of possible calendars would be on the order of 10²³⁰⁰. For comparison: the number of atoms in the observable universe is about 10⁸⁰. So the calendar you get is valid and reasonably compact, but it is not provably the theoretical minimum.
 
@@ -294,13 +294,13 @@ flowchart TD
 ⚠️ Note: this graph has been made by the AI
 ```mermaid
 flowchart TD
-    Start([Check day D]) --> A{"Free trainer of this module in some slot?"}
-    A -- No --> Fail["Day not feasible"]
-    A -- Yes --> B{"Free room of the right type in the same slot?"}
+    Start([Check day D]) --> C{"Group rest rules respected?"}
+    C -- No --> Fail["Day not feasible"]
+    C -- Yes --> A{"Free trainer of this module in a slot?"}
+    A -- No --> Fail
+    A -- Yes --> B{"Can all sessions of this day be assigned to distinct slots, each with a free trainer and a free room of the right type?"}
     B -- No --> Fail
-    B -- Yes --> C{"Group rest rules respected?"}
-    C -- No --> Fail
-    C -- Yes --> Pass["Day feasible"]
+    B -- Yes --> Pass["Day feasible"]
 ```
 ### Flowchart of trainer assignment priority
 ⚠️ Note: this graph has been made by the AI
