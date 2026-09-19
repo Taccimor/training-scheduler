@@ -22,7 +22,7 @@ It was born from a real need: coordinating training for hundreds of groups acros
 This code has been created mainly with AI (DeepSeek) because I'm not able to code. It has been tested manually, randomly checking some days by filtering the Excel table.
 
 # What this tool does
-Imagine you need to organise the same training programme for many groups of people. The programme may be composed of modules, each module may have a certain number of theory sessions and practice sessions. Every group must go through all the modules, in some order, and may need to respect a rest period between two consecutive training days (because they need to digest what they learned or because they may have other commitments).
+Imagine you need to organise the same training programme for many groups of people. The programme may be composed of modules, each module may have a certain number of theory sessions and practice sessions. Every group must go through all the modules, in some order, and may need to respect a rest period between two consecutive training days (because they need to digest what they learned or because they may have other commitments). The order of the modules is free: a group can, for example, do Module 5 first, then Module 1, then Module 3. The only rule is that a module must be completed once it has started — sessions of two different modules cannot interleave for the same group.
 
 The groups are spread across different geographic areas (venues). Each venue contains a fixed number of rooms, some may be dedicated to theory and some to practice. Because of geographical constraints, every group is bound to one venue: its participants can only train in the rooms of the venue they belong to.
 
@@ -66,9 +66,12 @@ This is the sheet you want to use if you need to filter, sort, or merge with oth
 
 ## How the scheduler works
 
+[Flowchart of the script](#flowchart-of-the-script)
+
 **Step 1 — Groups are attached to venues.** Each group belongs to exactly one venue, because participants can only train in the rooms of their own area. Either the script distributes groups evenly across venues, or you tell it exactly how many groups belong to each.
 
-**Step 2 — For each group, the script tries every possible order of the modules.** For example, in the current configuration, there are 5 modules, so there are 5 × 4 × 3 × 2 × 1 = 120 possible orders. For each order, the script attempts to fit the modules as early as possible in the calendar. When it has tested all 120 orders, it keeps the one that finishes soonest. Then it moves on to the next group.
+**Step 2 — For each group, the script tries every possible order of the modules.** For example, in the current configuration, there are 5 modules, so there are 5 × 4 × 3 × 2 × 1 = 120 possible orders. For each order, the script attempts to fit the modules as early as possible in the calendar. Each module is treated as an indivisible block: the script places all sessions of the first module of the permutation, then all sessions of the second, and so on. It never interleaves sessions of two different modules for the same group. This is what guarantees that, once a module has begun, it is completed before the next one starts. When it has tested all 120 orders, it keeps the one that finishes soonest. Then it moves on to the next group.
+[Flowchart of Step 2](#flowchart-of-permutation)
 
 **Step 3 — Fitting a module into the calendar.** For a given module in a given order, the script looks for the earliest day the group can start it. To accept a day, it checks three things:
 
@@ -78,12 +81,16 @@ This is the sheet you want to use if you need to filter, sort, or merge with oth
 
 If all three checks pass, the session is placed. If any fails, the script tries the next day, and so on, until it finds a suitable one. This is why a session may end up a few days later than strictly necessary if the trainers or rooms are already busy.
 
+[Flowchart of Step 3](#flowchart-of-the-feasibility-check-for-a-single-day)
+
 **Step 4 — Assigning trainers.** Once all the calendar days are fixed, the script picks a trainer for every session. It follows this priority order:
 
 1. **Continuity.** If the group already had a session of the same module with a certain trainer, the script tries to keep that same trainer. This gives the group consistency of teaching throughout a module.
 2. **Workload balance.** Among the free trainers of that module, the script prefers the ones who have worked less, so the burden is shared fairly.
-3. **Venue consistency.** Among those, the script prefers trainers who are already in the group's venue (or who have worked there often), so they travel less.
+3. **Venue consistency.** Among those, the script tries to reduce travel. It first checks whether any of them last worked at this same venue — those trainers are most likely already there and won't need to move. If there are several such trainers, the script picks the one who has worked at this venue the most often in the past. If none of the tied trainers was last at this venue, the script skips that first check and simply picks the one with the most past assignments to this venue.
 4. **Smallest ID.** If there are still ties, the trainer with the smallest number is chosen, for reproducibility.
+
+[Flowchart of Step 4](#flowchart-of-trainer-assignment-priority)
 
 **A note on continuity.** The continuity preference is **best‑effort**: it only works if the same trainer happens to be free on the days the group needs. If not, a different trainer is assigned and the preference is dropped. The script does **not** delay a session just to keep the same trainer, because that would lengthen the calendar. Continuity is nice to have, not a hard rule.
 
@@ -199,6 +206,68 @@ The candidate start day is advanced by one calendar day until all three pass.
 
 6. __Slot and room selection__. For each session, slots are tried from `0` to `slots_per_day-1` (earliest first). For a given slot, the smallest available room is picked.
 
+### Flowchart of the script
+⚠️ Note: this graph has been made by the AI
+```mermaid
+flowchart TD
+    Start([Start]) --> A["Load configuration"]
+    A --> B["Assign each group to a venue"]
+    B --> C{"Groups left to schedule?"}
+    C -- No --> Export["Export to Excel"]
+    Export --> End([End])
+    C -- Yes --> D["Pick next group"]
+    D --> Loop{"Permutations left to try?"}
+    Loop -- No --> Best["Keep permutation with earliest finish"]
+    Loop -- Yes --> E["Take next permutation"]
+    E --> F["For each module, search earliest feasible start day"]
+    F --> G{"All modules placed?"}
+    G -- No --> Loop
+    G -- Yes --> H["Update best if finish is earlier"]
+    H --> Loop
+    Best --> Assign["Assign trainers, slots, rooms"]
+    Assign --> C
+```
+### Flowchart of permutation
+⚠️ Note: this graph has been made by the AI
+```mermaid
+flowchart TD
+    Start([Test one permutation]) --> A["Place first module<br/>search earliest feasible day from day 0"]
+    A --> B["Advance pointer past the last day of this module"]
+    B --> C{"Modules left in this permutation?"}
+    C -- No --> Done([Permutation fully placed<br/>record its finish day])
+    C -- Yes --> D["Place next module<br/>search earliest feasible day from pointer"]
+    D --> E["Advance pointer past the last day of this module"]
+    E --> C
+```
+### Flowchart of the feasibility check for a single day
+⚠️ Note: this graph has been made by the AI
+```mermaid
+flowchart TD
+    Start([Check day D]) --> A{"Free trainer of this module in some slot?"}
+    A -- No --> Fail["Day not feasible"]
+    A -- Yes --> B{"Free room of the right type in the same slot?"}
+    B -- No --> Fail
+    B -- Yes --> C{"Group rest rules respected?"}
+    C -- No --> Fail
+    C -- Yes --> Pass["Day feasible"]
+```
+### Flowchart of trainer assignment priority
+⚠️ Note: this graph has been made by the AI
+```mermaid
+flowchart TD
+    Start([Assign trainer to a session]) --> A{"Preferred trainer free?"}
+    A -- Yes --> Use1["Use preferred trainer"]
+    A -- No --> B["Consider all free trainers of this module"]
+    B --> C["Keep only those with smallest workload"]
+    C --> D{"Any of them last worked at this venue?"}
+    D -- Yes --> E["Restrict to those trainers"]
+    D -- No --> F["Keep all candidates"]
+    E --> G["Pick the one with highest frequency at this venue"]
+    F --> G
+    G --> Use2["Assign trainer"]
+    Use1 --> Done([Done])
+    Use2 --> Done
+```
 ## Data structures
 All state lives in `ScheduleState`:
 
@@ -239,7 +308,8 @@ These are features that would make the tool more powerful, for whoever would lik
 - __Parallel / distributed scheduling__. For very large instances, split groups across workers and merge.
 - __Better logging__. Currently the script prints a progress line every 20 groups. A proper log file with timestamps and per‑group decisions would help debugging.
 - __Unit tests__. A small test suite validating the invariants (no double‑booked trainer, no double‑booked room, rest days respected, etc.) would make contributions safer.
-- __Packaging as a pip‑installable CLI__. Currently the user has to clone the repository and run a file. A pip install training-scheduler with a training-scheduler command would lower the barrier further.
+- __Hierarcy customization__: Possibility to activate or disable or reorder decision criteria like: Does each group have to go through the modules in order? Can modules interleave? Is the trainer continuity mandatory?
+- __Live preview__: Possibility to have a live preview of the calendar before exporting it to Excel, or possibility to have a preview of some useful data (e.g. total number of days) before exporting to Excel.
 
 ## Contributing
 Pull requests and issues are welcome. If you're proposing an algorithmic improvement, please include a short description of the scenario you are targeting.
