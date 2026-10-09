@@ -55,7 +55,7 @@ characteristics below. If one of them does not apply to your situation, this too
 - **Each trainer teaches exactly one module.** Trainers are not interchangeable across modules: a Module 2 trainer cannot teach Module 4, even temporarily.
 - **Each module has its own pool of trainers, with a fixed size.** The number of trainers per module is a configuration parameter and can differ from module to module.
 - **Trainers have no availability constraints beyond the slot model.** No vacations, no part‑time days, no "only available in the morning". A trainer is either free or busy on a given slot, nothing else.
-- **Trainers have no geographical constraints**. Contrary to the groups, trainers don't pertain to any specific venue or groups of venues. The code assumes that they are free to travel to every venue, but still tries to keep the movement as low as possible.
+- **Trainers have no geographical constraints**. Contrary to the groups, trainers don't pertain to any specific venue or groups of venues. The code assumes that they are free to travel to every venue, but still tries to keep the movement as low as possible
 
 ## Time and sessions
 
@@ -166,6 +166,16 @@ Maximum number of sessions that the same group can attend in one day. For exampl
 This parameter must satisfy `1 <= max_trainings_per_day_per_group <= slots_per_day`. If you set it higher than `slots_per_day`, the script raises an error, because a group cannot physically attend more sessions than there are slots in a day.
 
 ⚠️ Note: increasing this value does not shorten the rest days. Rest days are counted between training days, not between individual sessions. If rest_days = 6 and a group has 2 sessions on day 10, the next training day (whether one session or two) is still day 17 at the earliest.
+
+## `enforce_same_venue_per_day`
+A boolean flag, True by default.
+
+- When `True`, a trainer who works on a given day must deliver all their sessions of that day in the same venue. Rooms inside the venue can change freely between slots, only the venue is fixed.
+- When `False`, a trainer can work in more than one venue on the same day.
+
+This is useful when venues are far apart and moving from one to another within a single day is not practical. It has no effect when `slots_per_day = 1`, because in those cases trainers never have more than one session per day anyway.
+
+⚠️ Note: enabling this constraint can lengthen the calendar slightly, because the scheduler has to search a bit further when a trainer is already committed to another venue for the day. The result is always valid; it might just be a few days longer in extreme cases.
 
 ## `practice_rooms_per_venue`
 A list, one element per venue, telling how many practice rooms each venue has. Example: `self.practice_rooms_per_venue = [4, 2, 4, 1, 1, 2, 3, 2, 5, 2, 4, 6]`.
@@ -340,6 +350,7 @@ All state lives in `ScheduleState`:
 - Excel columns are dense. With many groups and many days, the Calendar sheet can become extremely wide.
 - I've never asked the AI ​​to refactor the code, because I honestly don't care, I wouldn't be able to fully understand it anyway. Moreover, the code is already fast.
 - The code is fast and reliable up to 6 modules. With 7 or more, runtime can grow quickly because the possible combinations of modules grows exponentially.
+- `enforce_same_venue_per_day` is a hard constraint on top of the greedy scheduler. If the trainer pool of a module is very small relative to the number of venues, this can lead to slightly longer calendars, because the scheduler has to place sessions on days where a trainer is available in that venue rather than another.
 
 ## Possible additional features
 ⚠️ Note: Some of this features have been suggested by the AI.
