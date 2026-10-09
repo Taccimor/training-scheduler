@@ -9,7 +9,7 @@ import os
 # ------------------------------------------------------------
 class Config:
     def __init__(self):
-        self.num_groups = 172
+        self.num_groups = 280
 
         # Trainers per module. One entry per module, in module-number order.
         self.trainers_per_module = [7, 5, 7, 7, 7]
@@ -17,24 +17,27 @@ class Config:
         # Rest days between any two training DAYS for the same group.
         # This is between days, not between individual sessions: if a group
         # has 2 sessions on the same day, they count as one training day.
-        self.rest_days = 6
+        self.rest_days = 0
 
         # Slots per day (e.g., 2 = morning + afternoon).
         self.slots_per_day = 2
 
         # Maximum number of sessions the SAME GROUP can attend in one day.
         # Must be >= 1 and <= slots_per_day.
-        # If 1, each group attends at most one session per day.
-        # If 2 (with slots_per_day >= 2), a group can attend both morning
-        # and afternoon.
         self.max_trainings_per_day_per_group = 1
+
+        # If True, a trainer working on a given day must stay in the SAME VENUE
+        # for every session they give that day. Rooms can change freely inside
+        # the venue. If False, a trainer may change venue between slots of the same day
+        self.enforce_same_venue_per_day = True
 
         # Venue definitions
         self.practice_rooms_per_venue = [4, 2, 4, 1, 1, 2, 3, 2, 5, 2, 4, 6]
         self.theory_rooms_per_venue  = [2, 4, 2, 1, 1, 1, 2, 3, 5, 2, 2, 7]
 
         # Optional: manually assign groups to venues
-        # Example: [10, 12, 15, 8, 14, 13, 11, 16, 9, 17, 20, 27]. The length must be the same as the number of venues, and the sum must equal num_groups.
+        # Example: [10, 12, 15, 8, 14, 13, 11, 16, 9, 17, 20, 27].
+        # The length must be the same as the number of venues, and the sum must equal num_groups.
         # To keep automatic distribution, insert None.
         self.groups_per_venue = None
 
@@ -51,20 +54,8 @@ class Config:
 # HOW TO ADD OR REMOVE A MODULE
 # ------------------------------
 # 1. Add or remove an entry in the BLOCKS dictionary below.
-#    - The key is an arbitrary label (e.g. 'M6'). It is only used
-#      for error messages and does not affect scheduling.
-#    - The value is an ORDERED list of (module_number, activity)
-#      tuples describing the sessions of that module.
-#        * module_number: integer. Must be the same for all tuples
-#          in the block.
-#        * activity: 'T' for theory or 'P' for practice.
-#    - Example, to add a sixth module with 3 theory + 2 practice:
-#         'M6': [(6, 'T'), (6, 'T'), (6, 'T'), (6, 'P'), (6, 'P')]
-# 2. Add or remove a corresponding entry in
-#    Config.trainers_per_module. The list must have exactly one
-#    number per module, in module-number order (1, 2, 3, ...).
-#
-# Module numbers must be consecutive starting from 1 (1, 2, 3, ...).
+# 2. Add or remove a corresponding entry in Config.trainers_per_module.
+# Module numbers must be consecutive starting from 1.
 # ------------------------------------------------------------
 BLOCKS = {
     'M1': [(1, 'T'), (1, 'T'), (1, 'T'), (1, 'P'), (1, 'P'), (1, 'P')],
@@ -77,10 +68,6 @@ BLOCK_NAMES = list(BLOCKS.keys())
 
 
 def validate_blocks():
-    """
-    Validate the BLOCKS dictionary and return the number of modules.
-    Raises ValueError with a clear message if something is wrong.
-    """
     module_numbers = set()
     for block_name, sessions in BLOCKS.items():
         if not sessions:
@@ -114,7 +101,6 @@ class ScheduleState:
     def __init__(self, cfg):
         self.cfg = cfg
 
-        # Validate max_trainings_per_day_per_group
         if cfg.max_trainings_per_day_per_group < 1:
             raise ValueError(
                 f"max_trainings_per_day_per_group must be at least 1, "
@@ -123,8 +109,7 @@ class ScheduleState:
         if cfg.max_trainings_per_day_per_group > cfg.slots_per_day:
             raise ValueError(
                 f"max_trainings_per_day_per_group ({cfg.max_trainings_per_day_per_group}) "
-                f"cannot exceed slots_per_day ({cfg.slots_per_day}): a group cannot attend "
-                f"more sessions than the number of available slots in a day."
+                f"cannot exceed slots_per_day ({cfg.slots_per_day})."
             )
 
         self.num_modules = validate_blocks()
@@ -138,7 +123,6 @@ class ScheduleState:
         if len(cfg.theory_rooms_per_venue) != self.num_venues:
             raise ValueError("practice_rooms_per_venue and theory_rooms_per_venue must have same length")
 
-        # Assign groups to venues
         if cfg.groups_per_venue is not None:
             if sum(cfg.groups_per_venue) != cfg.num_groups:
                 raise ValueError("sum(groups_per_venue) must equal num_groups")
@@ -166,7 +150,7 @@ class ScheduleState:
         self.practice_room_usage = defaultdict(lambda: defaultdict(lambda: defaultdict(set)))
         self.theory_room_usage = defaultdict(lambda: defaultdict(lambda: defaultdict(set)))
 
-        # Trainer venue consistency
+        # Trainer venue consistency (across days)
         self.trainer_last_venue = {
             m: [-1] * cfg.trainers_per_module[m - 1]
             for m in range(1, self.num_modules + 1)
@@ -176,6 +160,11 @@ class ScheduleState:
             for m in range(1, self.num_modules + 1)
         }
 
+        # NEW: which venue each trainer is committed to on a given day,
+        # for a given module. Used when enforce_same_venue_per_day is True.
+        # Access: self.trainer_day_venue[module][day][trainer_local] = venue
+        self.trainer_day_venue = defaultdict(lambda: defaultdict(dict))
+
         # Group constraints
         self.group_last_day = [-10**9] * cfg.num_groups
         self.group_busy_days = [set() for _ in range(cfg.num_groups)]
@@ -184,12 +173,6 @@ class ScheduleState:
 
     # ------------------------------------------------------------
     def _sessions_by_day_for_block(self, block_name, start_day):
-        """
-        Given a block and a start day, return a dict mapping day -> list of
-        (module, activity) sessions that fall on that day.
-        Sessions are packed max_trainings_per_day_per_group per training day,
-        with rest_days between training days.
-        """
         k = self.cfg.max_trainings_per_day_per_group
         gap = self.cfg.rest_days + 1
         sessions_by_day = defaultdict(list)
@@ -201,10 +184,14 @@ class ScheduleState:
     # ------------------------------------------------------------
     def can_assign_sessions_for_group(self, venue, day, sessions):
         """
-        Check if the given list of (module, activity) sessions can be assigned
-        to distinct slots on the same day for the same group.
+        Check whether the given list of (module, activity) sessions can be
+        assigned to distinct slots on the same day for the same group,
+        respecting trainer availability, room availability, and (if enabled)
+        the same-venue-per-day constraint for trainers.
         """
         slots = self.cfg.slots_per_day
+        enforce_venue = self.cfg.enforce_same_venue_per_day
+
         used_trainers = defaultdict(lambda: defaultdict(int))
         used_theory = defaultdict(int)
         used_practice = defaultdict(int)
@@ -215,6 +202,17 @@ class ScheduleState:
             used_theory[slot] = len(self.theory_room_usage[venue][day][slot])
             used_practice[slot] = len(self.practice_room_usage[venue][day][slot])
 
+        # Trainers already committed to a different venue on this day,
+        # per module. These are unavailable for any session at 'venue' today.
+        committed_elsewhere = {}
+        if enforce_venue:
+            for mod in range(1, self.num_modules + 1):
+                committed = set()
+                for trainer, v in self.trainer_day_venue[mod][day].items():
+                    if v != venue:
+                        committed.add(trainer)
+                committed_elsewhere[mod] = committed
+
         group_used_slots = set()
 
         for mod, act in sessions:
@@ -222,8 +220,19 @@ class ScheduleState:
             for slot in range(slots):
                 if slot in group_used_slots:
                     continue
-                if used_trainers[slot][mod] >= self.cfg.trainers_per_module[mod - 1]:
-                    continue
+
+                if enforce_venue:
+                    # We need at least one trainer who is:
+                    #   - not busy in this slot of this module
+                    #   - not committed to a different venue today
+                    busy_set = self.trainer_busy[mod][day][slot]
+                    unavailable = busy_set | committed_elsewhere.get(mod, set())
+                    if len(unavailable) >= self.cfg.trainers_per_module[mod - 1]:
+                        continue
+                else:
+                    if used_trainers[slot][mod] >= self.cfg.trainers_per_module[mod - 1]:
+                        continue
+
                 if act == 'T':
                     if used_theory[slot] >= self.cfg.theory_rooms_per_venue[venue]:
                         continue
@@ -232,6 +241,7 @@ class ScheduleState:
                     if used_practice[slot] >= self.cfg.practice_rooms_per_venue[venue]:
                         continue
                     used_practice[slot] += 1
+
                 used_trainers[slot][mod] += 1
                 group_used_slots.add(slot)
                 placed = True
@@ -242,18 +252,10 @@ class ScheduleState:
 
     # ------------------------------------------------------------
     def can_place_block(self, block_name, start_day, prev_finish, group_id):
-        """
-        Check if the block can be placed starting at start_day.
-        prev_finish is the last day the group had a session BEFORE this block,
-        or None if the group hasn't started yet.
-        """
         rest = self.cfg.rest_days
         venue = self.venue_for_group[group_id]
 
-        if prev_finish is None:
-            temp_last = -10**9
-        else:
-            temp_last = prev_finish
+        temp_last = prev_finish if prev_finish is not None else -10**9
 
         sessions_by_day = self._sessions_by_day_for_block(block_name, start_day)
 
@@ -276,29 +278,36 @@ class ScheduleState:
     # ------------------------------------------------------------
     def assign_session(self, day, module, activity, group_id,
                        preferred=None, group_slots_used=None):
-        """
-        Assign a trainer, slot, and room for one session on the given day.
-        group_slots_used: a set of slots already used by this group on this day.
-                          It is updated in place with the slot chosen here.
-        """
         if group_slots_used is None:
             group_slots_used = set()
 
         venue = self.venue_for_group[group_id]
         slots = self.cfg.slots_per_day
         num_trainers = self.cfg.trainers_per_module[module - 1]
+        enforce_venue = self.cfg.enforce_same_venue_per_day
 
         for slot in range(slots):
             if slot in group_slots_used:
                 continue
 
-            trainer = None
             busy_this_slot = self.trainer_busy[module][day][slot]
 
-            if preferred is not None and preferred not in busy_this_slot and preferred < num_trainers:
+            # Eligibility check: free in this slot, and (if enforcing)
+            # either uncommitted today or already committed to this venue.
+            def is_eligible(t):
+                if t in busy_this_slot:
+                    return False
+                if enforce_venue:
+                    committed = self.trainer_day_venue[module][day].get(t)
+                    if committed is not None and committed != venue:
+                        return False
+                return True
+
+            trainer = None
+            if preferred is not None and preferred < num_trainers and is_eligible(preferred):
                 trainer = preferred
             else:
-                free = [t for t in range(num_trainers) if t not in busy_this_slot]
+                free = [t for t in range(num_trainers) if is_eligible(t)]
                 if not free:
                     continue
                 min_work = min(self.trainer_total_days[module][t] for t in free)
@@ -327,7 +336,6 @@ class ScheduleState:
                 if r not in used:
                     room = r
                     break
-
             if room is None:
                 continue
 
@@ -336,6 +344,7 @@ class ScheduleState:
             self.trainer_total_days[module][trainer] += 1
             self.trainer_last_venue[module][trainer] = venue
             self.trainer_venue_freq[module][trainer][venue] += 1
+            self.trainer_day_venue[module][day][trainer] = venue   # NEW
 
             if activity == 'P':
                 self.practice_room_usage[venue][day][slot].add(room)
@@ -401,7 +410,6 @@ class ScheduleState:
         if best_perm is None:
             raise RuntimeError(f"Could not schedule group {group_id}")
 
-        # Commit
         preferred = {}
         for blk, start_day in zip(best_perm, best_starts):
             sessions_by_day = self._sessions_by_day_for_block(blk, start_day)
@@ -417,7 +425,7 @@ class ScheduleState:
 
 
 # ------------------------------------------------------------
-# Export to Excel (unchanged)
+# Export to Excel
 # ------------------------------------------------------------
 def export_to_excel(state, cfg, output_path):
     if not state.assignments:
@@ -488,6 +496,8 @@ def main():
     parser.add_argument('--output', type=str, default=cfg.output_path, help='Output Excel path')
     parser.add_argument('--max-workload-diff', type=int, default=cfg.max_workload_diff,
                         help='Max allowed trainer workload difference per module (warning only)')
+    parser.add_argument('--no-same-venue-per-day', action='store_true',
+                        help='Disable the constraint that a trainer must stay in the same venue on a given day.')
     args = parser.parse_args()
 
     cfg.num_groups = args.groups
@@ -495,6 +505,8 @@ def main():
     cfg.slots_per_day = args.slots
     cfg.max_trainings_per_day_per_group = args.max_per_day
     cfg.max_workload_diff = args.max_workload_diff
+    if args.no_same_venue_per_day:
+        cfg.enforce_same_venue_per_day = False
 
     if args.trainers:
         if len(args.trainers) != num_modules:
@@ -523,7 +535,8 @@ def main():
 
     print(f"Scheduling {cfg.num_groups} groups, {state.num_modules} modules, "
           f"rest={cfg.rest_days}, slots/day={cfg.slots_per_day}, "
-          f"max/day/group={cfg.max_trainings_per_day_per_group}")
+          f"max/day/group={cfg.max_trainings_per_day_per_group}, "
+          f"same-venue-per-day={cfg.enforce_same_venue_per_day}")
     print(f"Venues: {len(cfg.practice_rooms_per_venue)}")
     print(f"Practice rooms per venue: {cfg.practice_rooms_per_venue}")
     print(f"Theory rooms per venue:  {cfg.theory_rooms_per_venue}")
