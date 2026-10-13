@@ -438,11 +438,12 @@ def export_to_excel(state, cfg, output_path):
 
     calendar = [[''] * total_slots for _ in range(cfg.num_groups)]
     for ass in state.assignments:
-        day = ass['day']
+        day = ass['day']                          # 0-based, internal
         slot = ass['slot'] - 1
         flat_idx = day * slots + slot
-        group = ass['group']
-        cell = f"{ass['module']}-{ass['activity']}-{ass['trainer']}-{ass['venue']}-{ass['room']}"
+        group = ass['group']                      # 0-based, internal
+        # venue shown 1-based; day column header is 1-based; room already 1-based
+        cell = f"{ass['module']}-{ass['activity']}-{ass['trainer']}-{ass['venue'] + 1}-{ass['room']}"
         if calendar[group][flat_idx] == '':
             calendar[group][flat_idx] = cell
         else:
@@ -459,11 +460,16 @@ def export_to_excel(state, cfg, output_path):
         'venue': 'Venue',
         'room': 'Room'
     }, inplace=True)
+    # Convert 0-based internal values to 1-based display values
+    detailed['Day'] = detailed['Day'] + 1
+    detailed['Venue'] = detailed['Venue'] + 1
+    detailed['Group'] = detailed['Group'] + 1
 
     with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
         detailed.to_excel(writer, sheet_name='Detailed', index=False)
 
         cal_df = pd.DataFrame(calendar)
+        cal_df.index = cal_df.index + 1           # 1-based group numbers
         cal_df.index.name = 'Group'
         header = [f"Day {d+1}-{s+1}" for d in range(max_day + 1) for s in range(slots)]
         cal_df.columns = header
