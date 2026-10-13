@@ -81,7 +81,7 @@ pip install pandas openpyxl
 3. Open the file in any text editor, scroll to the `Config` class, adjust the parameters (see below).
 4. Run:
 ```
-python "training-scheduler.py"
+python3 "training-scheduler.py"
 ```
 5. Find the Excel file at the path indicated in the `Config` class.
 
